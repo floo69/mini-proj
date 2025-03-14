@@ -432,6 +432,57 @@ app.post(
   }
 );
 
+// Employer login endpoint
+app.post(
+  "/employers/login",
+  [
+    body("email").isEmail(),
+    body("password").notEmpty(),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { email, password } = req.body;
+      console.log("Login attempt for employer:", email);
+      
+      // Find employer by email
+      const [employers] = await db.query(
+        "SELECT * FROM employers WHERE email = ?",
+        [email]
+      );
+
+      if (employers.length === 0) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      const employer = employers[0];
+      
+      // Compare password
+      const isValidPassword = await bcrypt.compare(password, employer.password);
+      
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      // Don't send password in response
+      const { password: _, ...employerWithoutPassword } = employer;
+      
+      console.log("Employer login successful:", email);
+      res.json({
+        message: "Login successful",
+        user: employerWithoutPassword
+      });
+    } catch (err) {
+      console.error("Error in employer login:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });

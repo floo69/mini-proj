@@ -88,6 +88,7 @@ const EmployerPortal: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -110,14 +111,23 @@ const EmployerPortal: React.FC = () => {
   };
   const onSubmit = async (data: EmployerFormData) => {
     try {
+      setServerError(null);
       const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/employers`,
+        `${import.meta.env.VITE_API_URL}/employers/login`,
         data
       );
       console.log(response.data);
       setIsLoggedIn(true);
     } catch (error) {
-      console.error("Error creating employer:", error);
+      console.error("Error logging in:", error);
+      if (axios.isAxiosError(error)) {
+        const errorMessage = error.response?.data?.error || 
+                           error.response?.data?.message ||
+                           "An error occurred during login. Please try again.";
+        setServerError(errorMessage);
+      } else {
+        setServerError("An unexpected error occurred. Please try again.");
+      }
     }
   };
   if (!isLoggedIn) {
@@ -129,6 +139,11 @@ const EmployerPortal: React.FC = () => {
         ) : (
           <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md">
             <h2 className="text-2xl font-semibold mb-6">Login</h2>
+            {serverError && (
+              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+                {serverError}
+              </div>
+            )}
             <form onSubmit={handleSubmit(onSubmit)}>
               <div className="mb-4">
                 <label htmlFor="email" className="block mb-2">
