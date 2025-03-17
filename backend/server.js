@@ -8,12 +8,17 @@ const db = require("./db");
 const app = express();
 const port = 3000;
 
-// CORS configuration
-app.use(cors({
-  origin: 'http://localhost:5173', // Your frontend URL
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// Update CORS configuration - place this before any routes
+app.use(
+  cors({
+    origin: "http://localhost:5179", // Match your frontend origin exactly
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+  })
+);
 
 app.use(bodyParser.json());
 
@@ -129,55 +134,33 @@ app.post(
 );
 
 // Student login endpoint
-app.post(
-  "/students/login",
-  [
-    body("email").isEmail(),
-    body("password").notEmpty(),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
+app.post("/students/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const [rows] = await db.query("SELECT * FROM students WHERE email = ?", [
+      email,
+    ]);
 
-      const { email, password } = req.body;
-      console.log("Login attempt for:", email); // Add logging
-      
-      // Find user by email
-      const [users] = await db.query(
-        "SELECT * FROM students WHERE email = ?",
-        [email]
-      );
-
-      if (users.length === 0) {
-        return res.status(401).json({ error: "Invalid email or password" });
-      }
-
-      const user = users[0];
-      
-      // Compare password
-      const isValidPassword = await bcrypt.compare(password, user.password);
-      
-      if (!isValidPassword) {
-        return res.status(401).json({ error: "Invalid email or password" });
-      }
-
-      // Don't send password in response
-      const { password: _, ...userWithoutPassword } = user;
-      
-      console.log("Login successful for:", email);
-      res.json({
-        message: "Login successful",
-        user: userWithoutPassword
-      });
-    } catch (err) {
-      console.error("Error in login:", err);
-      res.status(500).json({ error: "Internal server error" });
+    if (rows.length === 0) {
+      return res.status(401).json({ message: "Invalid credentials" });
     }
+
+    const student = rows[0];
+    const validPassword = await bcrypt.compare(password, student.password);
+
+    if (!validPassword) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    res.json({
+      message: "Login successful",
+      student: { id: student.id, email: student.email },
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ message: "Server error" });
   }
-);
+});
 
 // Student signup endpoint
 app.post(
@@ -212,34 +195,39 @@ app.post(
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
-      
+
       // Update the SQL query to match your database schema
       const result = await db.query(
         "INSERT INTO students (name, email, password, created_at) VALUES (?, ?, ?, NOW())",
         [name, email, hashedPassword]
       );
-      
+
       console.log("Student created successfully:", result);
-      res.status(201).json({ 
+      res.status(201).json({
         message: "Student account created successfully",
-        userId: result[0].insertId 
+        userId: result[0].insertId,
       });
     } catch (err) {
       console.error("Detailed error in signup:", {
         message: err.message,
         code: err.code,
-        stack: err.stack
+        stack: err.stack,
       });
-      
+
       // Send more specific error messages
-      if (err.code === 'ER_NO_SUCH_TABLE') {
-        res.status(500).json({ error: "Database table not found. Please contact support." });
-      } else if (err.code === 'ER_BAD_FIELD_ERROR') {
-        res.status(500).json({ error: "Database schema mismatch. Please contact support." });
+      if (err.code === "ER_NO_SUCH_TABLE") {
+        res
+          .status(500)
+          .json({ error: "Database table not found. Please contact support." });
+      } else if (err.code === "ER_BAD_FIELD_ERROR") {
+        res
+          .status(500)
+          .json({ error: "Database schema mismatch. Please contact support." });
       } else {
-        res.status(500).json({ 
+        res.status(500).json({
           error: "Unable to create account. Please try again later.",
-          details: process.env.NODE_ENV === 'development' ? err.message : undefined
+          details:
+            process.env.NODE_ENV === "development" ? err.message : undefined,
         });
       }
     }
@@ -279,34 +267,39 @@ app.post(
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
-      
+
       // Insert new admin with default role and status
       const result = await db.query(
         "INSERT INTO admins (name, email, password, created_at, role, status) VALUES (?, ?, ?, NOW(), 'admin', 'active')",
         [name, email, hashedPassword]
       );
-      
+
       console.log("Admin created successfully:", result);
-      res.status(201).json({ 
+      res.status(201).json({
         message: "Admin account created successfully",
-        adminId: result[0].insertId 
+        adminId: result[0].insertId,
       });
     } catch (err) {
       console.error("Detailed error in admin signup:", {
         message: err.message,
         code: err.code,
-        stack: err.stack
+        stack: err.stack,
       });
-      
+
       // Send more specific error messages
-      if (err.code === 'ER_NO_SUCH_TABLE') {
-        res.status(500).json({ error: "Database table not found. Please contact support." });
-      } else if (err.code === 'ER_BAD_FIELD_ERROR') {
-        res.status(500).json({ error: "Database schema mismatch. Please contact support." });
+      if (err.code === "ER_NO_SUCH_TABLE") {
+        res
+          .status(500)
+          .json({ error: "Database table not found. Please contact support." });
+      } else if (err.code === "ER_BAD_FIELD_ERROR") {
+        res
+          .status(500)
+          .json({ error: "Database schema mismatch. Please contact support." });
       } else {
-        res.status(500).json({ 
+        res.status(500).json({
           error: "Unable to create account. Please try again later.",
-          details: process.env.NODE_ENV === 'development' ? err.message : undefined
+          details:
+            process.env.NODE_ENV === "development" ? err.message : undefined,
         });
       }
     }
@@ -331,7 +324,11 @@ app.post(
       }
 
       const { companyName, contactName, email, password } = req.body;
-      console.log("Received employer signup request for:", { companyName, contactName, email });
+      console.log("Received employer signup request for:", {
+        companyName,
+        contactName,
+        email,
+      });
 
       // Check if email already exists
       const [existingEmployers] = await db.query(
@@ -347,34 +344,39 @@ app.post(
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
-      
+
       // Insert new employer
       const result = await db.query(
         "INSERT INTO employers (company_name, contact_name, email, password, created_at) VALUES (?, ?, ?, ?, NOW())",
         [companyName, contactName, email, hashedPassword]
       );
-      
+
       console.log("Employer created successfully:", result);
-      res.status(201).json({ 
+      res.status(201).json({
         message: "Employer account created successfully",
-        employerId: result[0].insertId 
+        employerId: result[0].insertId,
       });
     } catch (err) {
       console.error("Detailed error in employer signup:", {
         message: err.message,
         code: err.code,
-        stack: err.stack
+        stack: err.stack,
       });
-      
+
       // Send more specific error messages
-      if (err.code === 'ER_NO_SUCH_TABLE') {
-        res.status(500).json({ error: "Database table not found. Please contact support." });
-      } else if (err.code === 'ER_BAD_FIELD_ERROR') {
-        res.status(500).json({ error: "Database schema mismatch. Please contact support." });
+      if (err.code === "ER_NO_SUCH_TABLE") {
+        res
+          .status(500)
+          .json({ error: "Database table not found. Please contact support." });
+      } else if (err.code === "ER_BAD_FIELD_ERROR") {
+        res
+          .status(500)
+          .json({ error: "Database schema mismatch. Please contact support." });
       } else {
-        res.status(500).json({ 
+        res.status(500).json({
           error: "Unable to create account. Please try again later.",
-          details: process.env.NODE_ENV === 'development' ? err.message : undefined
+          details:
+            process.env.NODE_ENV === "development" ? err.message : undefined,
         });
       }
     }
@@ -384,10 +386,7 @@ app.post(
 // Admin login endpoint
 app.post(
   "/admins/login",
-  [
-    body("email").isEmail(),
-    body("password").notEmpty(),
-  ],
+  [body("email").isEmail(), body("password").notEmpty()],
   async (req, res) => {
     try {
       const errors = validationResult(req);
@@ -397,33 +396,32 @@ app.post(
 
       const { email, password } = req.body;
       console.log("Login attempt for admin:", email);
-      
+
       // Find admin by email
-      const [admins] = await db.query(
-        "SELECT * FROM admins WHERE email = ?",
-        [email]
-      );
+      const [admins] = await db.query("SELECT * FROM admins WHERE email = ?", [
+        email,
+      ]);
 
       if (admins.length === 0) {
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
       const admin = admins[0];
-      
+
       // Compare password
       const isValidPassword = await bcrypt.compare(password, admin.password);
-      
+
       if (!isValidPassword) {
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
       // Don't send password in response
       const { password: _, ...adminWithoutPassword } = admin;
-      
+
       console.log("Admin login successful:", email);
       res.json({
         message: "Login successful",
-        user: adminWithoutPassword
+        user: adminWithoutPassword,
       });
     } catch (err) {
       console.error("Error in admin login:", err);
@@ -435,10 +433,7 @@ app.post(
 // Employer login endpoint
 app.post(
   "/employers/login",
-  [
-    body("email").isEmail(),
-    body("password").notEmpty(),
-  ],
+  [body("email").isEmail(), body("password").notEmpty()],
   async (req, res) => {
     try {
       const errors = validationResult(req);
@@ -448,7 +443,7 @@ app.post(
 
       const { email, password } = req.body;
       console.log("Login attempt for employer:", email);
-      
+
       // Find employer by email
       const [employers] = await db.query(
         "SELECT * FROM employers WHERE email = ?",
@@ -460,21 +455,21 @@ app.post(
       }
 
       const employer = employers[0];
-      
+
       // Compare password
       const isValidPassword = await bcrypt.compare(password, employer.password);
-      
+
       if (!isValidPassword) {
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
       // Don't send password in response
       const { password: _, ...employerWithoutPassword } = employer;
-      
+
       console.log("Employer login successful:", email);
       res.json({
         message: "Login successful",
-        user: employerWithoutPassword
+        user: employerWithoutPassword,
       });
     } catch (err) {
       console.error("Error in employer login:", err);

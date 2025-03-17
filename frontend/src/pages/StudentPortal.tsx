@@ -37,17 +37,25 @@ const StudentPortal: React.FC = () => {
   const onSubmit = async (data: StudentFormData) => {
     try {
       setLoginError(null);
-      const apiUrl = `${import.meta.env.VITE_API_URL}/students/login`;
-      console.log("Attempting login at:", apiUrl);
-      
-      const response = await axios.post(apiUrl, data);
+      const response = await axios.post(
+        "http://localhost:3000/students/login",
+        data,
+        {
+          withCredentials: true,
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+        }
+      );
       console.log("Login successful:", response.data);
       setIsLoggedIn(true);
     } catch (error) {
       console.error("Error logging in:", error);
       if (axios.isAxiosError(error)) {
-        const errorMessage = error.response?.data?.error || 
-                           "An error occurred during login. Please try again.";
+        const errorMessage =
+          error.response?.data?.error ||
+          "An error occurred during login. Please try again.";
         setLoginError(errorMessage);
       } else {
         setLoginError("An unexpected error occurred. Please try again.");
